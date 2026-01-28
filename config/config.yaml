@@ -1,0 +1,30 @@
+# RedNote Auto Configuration
+# Environment variables override these values
+
+# Sync settings
+sync_interval_minutes: 30
+enabled_platforms:
+  - xhs
+  - wechat
+
+# Twitter settings (use env vars for secrets)
+twitter:
+  target_user_ids: []  # Add Twitter user IDs to monitor
+
+# XHS settings
+xhs:
+  browser_state_dir: data/browser_state
+  headless: true
+
+# OpenAI settings
+openai:
+  model: gpt-4o
+
+# Database settings
+database:
+  url: sqlite+aiosqlite:///data/posts.db
+
+# Inngest settings
+inngest:
+  app_id: rednote-auto
+  is_production: false
