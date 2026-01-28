@@ -339,6 +339,146 @@ class TestPublishNote:
                 content="Test content",
             )
 
+    @patch("src.services.xhs_service.async_playwright")
+    @patch("src.services.xhs_service.asyncio")
+    async def test_publish_note_success(self, mock_asyncio, mock_async_playwright):
+        """Test successful note publishing."""
+        mock_playwright = AsyncMock()
+        mock_browser = AsyncMock()
+        mock_context = AsyncMock()
+        mock_page = AsyncMock()
+        mock_page2 = AsyncMock()
+        mock_locator = AsyncMock()
+
+        mock_async_playwright.return_value.start = AsyncMock(return_value=mock_playwright)
+        mock_playwright.chromium.launch = AsyncMock(return_value=mock_browser)
+        mock_browser.new_context = AsyncMock(return_value=mock_context)
+
+        # First page for login check (logged in)
+        mock_page.url = "https://creator.xiaohongshu.com/publish/publish"
+        mock_page.goto = AsyncMock()
+        mock_page.wait_for_load_state = AsyncMock()
+        mock_page.close = AsyncMock()
+
+        # Second page for actual publish
+        mock_page2.url = "https://creator.xiaohongshu.com/publish/success/12345"
+        mock_page2.goto = AsyncMock()
+        mock_page2.wait_for_load_state = AsyncMock()
+        mock_page2.wait_for_url = AsyncMock()
+        mock_page2.close = AsyncMock()
+        mock_page2.locator = Mock(return_value=mock_locator)
+        mock_locator.first = mock_locator
+        mock_locator.fill = AsyncMock()
+        mock_locator.click = AsyncMock()
+        mock_locator.set_input_files = AsyncMock()
+
+        mock_context.new_page = AsyncMock(side_effect=[mock_page, mock_page2])
+        mock_asyncio.sleep = AsyncMock()
+
+        service = XHSService(
+            browser_state_dir=Path("/tmp/test"),
+            headless=True,
+        )
+
+        result = await service.publish_note(
+            title="Test Title",
+            content="Test content",
+        )
+
+        assert result is not None
+        mock_page2.close.assert_called_once()
+
+    @patch("src.services.xhs_service.async_playwright")
+    @patch("src.services.xhs_service.asyncio")
+    async def test_publish_note_with_images(self, mock_asyncio, mock_async_playwright):
+        """Test note publishing with images."""
+        mock_playwright = AsyncMock()
+        mock_browser = AsyncMock()
+        mock_context = AsyncMock()
+        mock_page = AsyncMock()
+        mock_page2 = AsyncMock()
+        mock_locator = AsyncMock()
+
+        mock_async_playwright.return_value.start = AsyncMock(return_value=mock_playwright)
+        mock_playwright.chromium.launch = AsyncMock(return_value=mock_browser)
+        mock_browser.new_context = AsyncMock(return_value=mock_context)
+
+        mock_page.url = "https://creator.xiaohongshu.com/publish/publish"
+        mock_page.goto = AsyncMock()
+        mock_page.wait_for_load_state = AsyncMock()
+        mock_page.close = AsyncMock()
+
+        mock_page2.url = "https://creator.xiaohongshu.com/publish/success/12345"
+        mock_page2.goto = AsyncMock()
+        mock_page2.wait_for_load_state = AsyncMock()
+        mock_page2.wait_for_url = AsyncMock()
+        mock_page2.close = AsyncMock()
+        mock_page2.locator = Mock(return_value=mock_locator)
+        mock_locator.first = mock_locator
+        mock_locator.fill = AsyncMock()
+        mock_locator.click = AsyncMock()
+        mock_locator.set_input_files = AsyncMock()
+
+        mock_context.new_page = AsyncMock(side_effect=[mock_page, mock_page2])
+        mock_asyncio.sleep = AsyncMock()
+
+        service = XHSService(
+            browser_state_dir=Path("/tmp/test"),
+            headless=True,
+        )
+
+        result = await service.publish_note(
+            title="Test Title",
+            content="Test content",
+            images=["/path/to/image1.jpg", "/path/to/image2.jpg"],
+        )
+
+        assert result is not None
+        # Verify set_input_files was called for each image
+        assert mock_locator.set_input_files.call_count == 2
+
+    @patch("src.services.xhs_service.async_playwright")
+    async def test_publish_note_failure(self, mock_async_playwright):
+        """Test publish_note failure handling."""
+        mock_playwright = AsyncMock()
+        mock_browser = AsyncMock()
+        mock_context = AsyncMock()
+        mock_page = AsyncMock()
+        mock_page2 = AsyncMock()
+        mock_locator = AsyncMock()
+
+        mock_async_playwright.return_value.start = AsyncMock(return_value=mock_playwright)
+        mock_playwright.chromium.launch = AsyncMock(return_value=mock_browser)
+        mock_browser.new_context = AsyncMock(return_value=mock_context)
+
+        mock_page.url = "https://creator.xiaohongshu.com/publish/publish"
+        mock_page.goto = AsyncMock()
+        mock_page.wait_for_load_state = AsyncMock()
+        mock_page.close = AsyncMock()
+
+        mock_page2.goto = AsyncMock()
+        mock_page2.wait_for_load_state = AsyncMock()
+        mock_page2.locator = Mock(return_value=mock_locator)
+        mock_locator.first = mock_locator
+        mock_locator.fill = AsyncMock()
+        mock_locator.click = AsyncMock(side_effect=Exception("Click failed"))
+        mock_page2.close = AsyncMock()
+
+        mock_context.new_page = AsyncMock(side_effect=[mock_page, mock_page2])
+
+        service = XHSService(
+            browser_state_dir=Path("/tmp/test"),
+            headless=True,
+        )
+
+        result = await service.publish_note(
+            title="Test Title",
+            content="Test content",
+        )
+
+        assert result is None
+        mock_page2.close.assert_called_once()
+
 
 class TestClose:
     """Tests for close method."""

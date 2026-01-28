@@ -51,6 +51,22 @@ packages = ["src"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/functions/sync_twitter.py",
+    "src/functions/translate_tweet.py",
+    "src/functions/publish_content.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+fail_under = 80
+
 [dependency-groups]
 dev = [
     "pytest-cov>=7.0.0",
