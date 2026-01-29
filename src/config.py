@@ -22,6 +22,7 @@ class OpenAIConfig(BaseSettings):
 
     api_key: str = Field(default="")
     model: str = Field(default="gpt-4o")
+    base_url: Optional[str] = Field(default=None)
 
     model_config = SettingsConfigDict(env_prefix="OPENAI_")
 

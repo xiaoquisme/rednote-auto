@@ -22,18 +22,24 @@ class TranslatorService:
 
 请直接输出翻译结果，不要添加任何解释。"""
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ):
         """Initialize OpenAI client."""
         settings = get_settings()
         self.api_key = api_key or settings.openai.api_key
         self.model = model or settings.openai.model
+        self.base_url = base_url or settings.openai.base_url
         self._client: Optional[OpenAI] = None
 
     @property
     def client(self) -> OpenAI:
         """Get or create the OpenAI client."""
         if self._client is None:
-            self._client = OpenAI(api_key=self.api_key)
+            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         return self._client
 
     def translate(self, text: str) -> str:
