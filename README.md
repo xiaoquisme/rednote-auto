@@ -1,5 +1,9 @@
 # rednote-auto
 
+[![CI](https://github.com/xiaoquisme/rednote-auto/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaoquisme/rednote-auto/actions/workflows/ci.yml)
+[![Docker](https://github.com/xiaoquisme/rednote-auto/actions/workflows/docker.yml/badge.svg)](https://github.com/xiaoquisme/rednote-auto/actions/workflows/docker.yml)
+[![codecov](https://codecov.io/gh/xiaoquisme/rednote-auto/graph/badge.svg)](https://codecov.io/gh/xiaoquisme/rednote-auto)
+
 Automatically sync X (Twitter) posts to 小红书 (XHS) and WeChat Official Account with AI-powered translation.
 
 ## Features
