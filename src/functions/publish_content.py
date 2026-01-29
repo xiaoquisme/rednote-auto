@@ -39,6 +39,7 @@ async def publish_content_fn(
 
     # Step 1: Publish to XHS if enabled
     if "xhs" in enabled_platforms:
+
         async def publish_xhs() -> dict:
             try:
                 xhs = XHSService()
@@ -86,6 +87,7 @@ async def publish_content_fn(
 
     # Step 2: Publish to WeChat if enabled
     if "wechat" in enabled_platforms:
+
         async def publish_wechat() -> dict:
             try:
                 wechat = WeChatService()
@@ -139,13 +141,12 @@ async def publish_content_fn(
 
     # Mark as failed if nothing was published
     if not results["published"]:
+
         async def mark_failed() -> None:
             db = get_db()
             async with db.session() as session:
                 result = await session.execute(
-                    select(SyncRecordModel).where(
-                        SyncRecordModel.tweet_id == tweet_id
-                    )
+                    select(SyncRecordModel).where(SyncRecordModel.tweet_id == tweet_id)
                 )
                 record = result.scalar_one_or_none()
                 if record:

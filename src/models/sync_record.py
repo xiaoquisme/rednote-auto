@@ -28,7 +28,9 @@ class SyncRecord(BaseModel):
     translated_text: Optional[str] = Field(default=None, description="Translated text")
     status: SyncStatus = Field(default=SyncStatus.PENDING)
     xhs_post_id: Optional[str] = Field(default=None, description="小红书 post ID")
-    wechat_article_id: Optional[str] = Field(default=None, description="WeChat article ID")
+    wechat_article_id: Optional[str] = Field(
+        default=None, description="WeChat article ID"
+    )
     error_message: Optional[str] = Field(default=None, description="Error if failed")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

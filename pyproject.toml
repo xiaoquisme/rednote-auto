@@ -71,4 +71,5 @@ fail_under = 80
 dev = [
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
+    "ruff>=0.14.14",
 ]

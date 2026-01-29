@@ -40,9 +40,7 @@ async def translate_tweet_fn(
         db = get_db()
         async with db.session() as session:
             result = await session.execute(
-                select(SyncRecordModel).where(
-                    SyncRecordModel.tweet_id == tweet["id"]
-                )
+                select(SyncRecordModel).where(SyncRecordModel.tweet_id == tweet["id"])
             )
             record = result.scalar_one_or_none()
             if record:

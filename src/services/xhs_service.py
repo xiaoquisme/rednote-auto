@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
-from playwright.async_api import async_playwright, Browser, Page, BrowserContext
+from playwright.async_api import async_playwright, Browser, BrowserContext
 
 from src.config import get_settings
 
@@ -155,7 +155,9 @@ class XHSService:
             await publish_btn.click()
 
             # Wait for success
-            await page.wait_for_url(f"{self.CREATOR_URL}/publish/success**", timeout=30000)
+            await page.wait_for_url(
+                f"{self.CREATOR_URL}/publish/success**", timeout=30000
+            )
 
             # Extract post ID from success page if possible
             success_url = page.url

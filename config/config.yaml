@@ -18,7 +18,7 @@ xhs:
 
 # OpenAI settings
 openai:
-  model: gpt-4o
+  model: openai/gpt-5.2
 
 # Database settings
 database:
