@@ -15,16 +15,21 @@ def test_default_settings():
     assert "wechat" in settings.enabled_platforms
 
 
-def test_twitter_config():
-    """Test Twitter config."""
-    config = TwitterConfig()
+def test_twitter_config(monkeypatch):
+    """Test Twitter config with defaults when no env vars set."""
+    monkeypatch.delenv("TWITTER_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("TWITTER_TARGET_USER_IDS", raising=False)
+    config = TwitterConfig(_env_file=None)
     assert config.bearer_token == ""
     assert config.target_user_ids == []
 
 
-def test_openai_config():
-    """Test OpenAI config."""
-    config = OpenAIConfig()
+def test_openai_config(monkeypatch):
+    """Test OpenAI config with defaults when no env vars set."""
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    config = OpenAIConfig(_env_file=None)
     assert config.model == "gpt-4o"
 
 

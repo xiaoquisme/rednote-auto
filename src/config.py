@@ -14,7 +14,12 @@ class TwitterConfig(BaseSettings):
     bearer_token: str = Field(default="")
     target_user_ids: list[str] = Field(default_factory=list)
 
-    model_config = SettingsConfigDict(env_prefix="TWITTER_")
+    model_config = SettingsConfigDict(
+        env_prefix="TWITTER_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 class OpenAIConfig(BaseSettings):
@@ -24,7 +29,12 @@ class OpenAIConfig(BaseSettings):
     model: str = Field(default="gpt-4o")
     base_url: Optional[str] = Field(default=None)
 
-    model_config = SettingsConfigDict(env_prefix="OPENAI_")
+    model_config = SettingsConfigDict(
+        env_prefix="OPENAI_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 class WeChatConfig(BaseSettings):
@@ -33,7 +43,12 @@ class WeChatConfig(BaseSettings):
     app_id: str = Field(default="")
     app_secret: str = Field(default="")
 
-    model_config = SettingsConfigDict(env_prefix="WECHAT_")
+    model_config = SettingsConfigDict(
+        env_prefix="WECHAT_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 class XHSConfig(BaseSettings):
@@ -42,7 +57,12 @@ class XHSConfig(BaseSettings):
     browser_state_dir: Path = Field(default=Path("data/browser_state"))
     headless: bool = Field(default=True)
 
-    model_config = SettingsConfigDict(env_prefix="XHS_")
+    model_config = SettingsConfigDict(
+        env_prefix="XHS_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 class DatabaseConfig(BaseSettings):
@@ -50,7 +70,12 @@ class DatabaseConfig(BaseSettings):
 
     url: str = Field(default="sqlite+aiosqlite:///data/posts.db")
 
-    model_config = SettingsConfigDict(env_prefix="DATABASE_")
+    model_config = SettingsConfigDict(
+        env_prefix="DATABASE_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 class InngestConfig(BaseSettings):
@@ -59,18 +84,60 @@ class InngestConfig(BaseSettings):
     app_id: str = Field(default="rednote-auto")
     is_production: bool = Field(default=False)
 
-    model_config = SettingsConfigDict(env_prefix="INNGEST_")
+    model_config = SettingsConfigDict(
+        env_prefix="INNGEST_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 class Settings(BaseSettings):
     """Application settings."""
 
-    twitter: TwitterConfig = Field(default_factory=TwitterConfig)
-    openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
-    wechat: WeChatConfig = Field(default_factory=WeChatConfig)
-    xhs: XHSConfig = Field(default_factory=XHSConfig)
-    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
-    inngest: InngestConfig = Field(default_factory=InngestConfig)
+    # Lazy load nested configs to ensure env vars are read at access time
+    _twitter: Optional[TwitterConfig] = None
+    _openai: Optional[OpenAIConfig] = None
+    _wechat: Optional[WeChatConfig] = None
+    _xhs: Optional[XHSConfig] = None
+    _database: Optional[DatabaseConfig] = None
+    _inngest: Optional[InngestConfig] = None
+
+    @property
+    def twitter(self) -> TwitterConfig:
+        if self._twitter is None:
+            self._twitter = TwitterConfig()
+        return self._twitter
+
+    @property
+    def openai(self) -> OpenAIConfig:
+        if self._openai is None:
+            self._openai = OpenAIConfig()
+        return self._openai
+
+    @property
+    def wechat(self) -> WeChatConfig:
+        if self._wechat is None:
+            self._wechat = WeChatConfig()
+        return self._wechat
+
+    @property
+    def xhs(self) -> XHSConfig:
+        if self._xhs is None:
+            self._xhs = XHSConfig()
+        return self._xhs
+
+    @property
+    def database(self) -> DatabaseConfig:
+        if self._database is None:
+            self._database = DatabaseConfig()
+        return self._database
+
+    @property
+    def inngest(self) -> InngestConfig:
+        if self._inngest is None:
+            self._inngest = InngestConfig()
+        return self._inngest
 
     # Sync settings
     sync_interval_minutes: int = Field(default=30)
@@ -80,6 +147,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
+        extra="ignore",  # Ignore env vars meant for nested configs
     )
 
     @classmethod
