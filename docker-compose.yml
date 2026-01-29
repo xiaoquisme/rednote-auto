@@ -21,7 +21,7 @@ services:
       - XHS_HEADLESS=${XHS_HEADLESS:-true}
       - XHS_BROWSER_STATE_DIR=/app/data/browser_state
       # Database
-      - DATABASE_URL=sqlite+aiosqlite:///app/data/posts.db
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/posts.db
       # Inngest
       - INNGEST_APP_ID=${INNGEST_APP_ID:-rednote-auto}
       - INNGEST_IS_PRODUCTION=${INNGEST_IS_PRODUCTION:-false}
