@@ -1,0 +1,61 @@
+services:
+  # Main application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Twitter API
+      - TWITTER_BEARER_TOKEN=${TWITTER_BEARER_TOKEN}
+      - TWITTER_TARGET_USER_IDS=${TWITTER_TARGET_USER_IDS}
+      # OpenAI API
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      # WeChat (optional)
+      - WECHAT_APP_ID=${WECHAT_APP_ID:-}
+      - WECHAT_APP_SECRET=${WECHAT_APP_SECRET:-}
+      # XHS
+      - XHS_HEADLESS=${XHS_HEADLESS:-true}
+      - XHS_BROWSER_STATE_DIR=/app/data/browser_state
+      # Database
+      - DATABASE_URL=sqlite+aiosqlite:///app/data/posts.db
+      # Inngest
+      - INNGEST_APP_ID=${INNGEST_APP_ID:-rednote-auto}
+      - INNGEST_IS_PRODUCTION=${INNGEST_IS_PRODUCTION:-false}
+      - INNGEST_DEV_SERVER_URL=http://inngest:8288
+    volumes:
+      # Persist data
+      - ./data:/app/data
+    depends_on:
+      - inngest
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Inngest Dev Server (for development)
+  inngest:
+    image: inngest/inngest:latest
+    ports:
+      - "8288:8288"
+    command: ["inngest", "dev", "-u", "http://app:8000/api/inngest"]
+    restart: unless-stopped
+
+  # XHS Login Helper (run manually when needed)
+  xhs-login:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - XHS_HEADLESS=false
+      - XHS_BROWSER_STATE_DIR=/app/data/browser_state
+    volumes:
+      - ./data:/app/data
+    command: ["python", "scripts/setup_xhs_login.py"]
+    profiles:
+      - login  # Only run with: docker compose --profile login run xhs-login
