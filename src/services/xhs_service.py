@@ -92,9 +92,9 @@ class XHSService:
             print("Please scan the QR code in the browser to log in...")
             print(f"Waiting up to {timeout} seconds...")
 
-            # Wait for redirect to creator dashboard
+            # Wait for redirect away from login page (login not in URL)
             await page.wait_for_url(
-                f"{self.CREATOR_URL}/**",
+                lambda url: "creator.xiaohongshu.com" in url and "login" not in url,
                 timeout=timeout * 1000,
             )
 
