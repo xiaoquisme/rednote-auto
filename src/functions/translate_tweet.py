@@ -13,10 +13,7 @@ from sqlalchemy import select
     trigger=inngest.TriggerEvent(event="tweet.fetched"),
     retries=3,
 )
-async def translate_tweet_fn(
-    ctx: inngest.Context,
-    step: inngest.Step,
-) -> dict:
+async def translate_tweet_fn(ctx: inngest.Context) -> dict:
     """
     Translate a fetched tweet to Chinese.
 
@@ -33,7 +30,7 @@ async def translate_tweet_fn(
         translator = TranslatorService()
         return translator.translate(tweet["text"])
 
-    translated_text = await step.run("translate", translate)
+    translated_text = await ctx.step.run("translate", translate)
 
     # Step 2: Update database with translation
     async def update_db() -> None:
@@ -47,10 +44,10 @@ async def translate_tweet_fn(
                 record.translated_text = translated_text
                 record.status = SyncStatusEnum.TRANSLATED
 
-    await step.run("update-db", update_db)
+    await ctx.step.run("update-db", update_db)
 
     # Step 3: Send translated event
-    await step.send_event(
+    await ctx.step.send_event(
         "send-translated-event",
         events=[
             inngest.Event(

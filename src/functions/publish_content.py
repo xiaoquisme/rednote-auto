@@ -15,10 +15,7 @@ from sqlalchemy import select
     trigger=inngest.TriggerEvent(event="tweet.translated"),
     retries=2,
 )
-async def publish_content_fn(
-    ctx: inngest.Context,
-    step: inngest.Step,
-) -> dict:
+async def publish_content_fn(ctx: inngest.Context) -> dict:
     """
     Publish translated content to enabled platforms.
 
@@ -59,7 +56,7 @@ async def publish_content_fn(
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
-        xhs_result = await step.run("publish-xhs", publish_xhs)
+        xhs_result = await ctx.step.run("publish-xhs", publish_xhs)
 
         if xhs_result["success"]:
             results["published"].append("xhs")
@@ -81,7 +78,7 @@ async def publish_content_fn(
                         else:
                             record.status = SyncStatusEnum.PUBLISHED_XHS
 
-            await step.run("update-xhs-status", update_xhs_status)
+            await ctx.step.run("update-xhs-status", update_xhs_status)
         else:
             results["xhs_error"] = xhs_result.get("error")
 
@@ -113,7 +110,7 @@ async def publish_content_fn(
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
-        wechat_result = await step.run("publish-wechat", publish_wechat)
+        wechat_result = await ctx.step.run("publish-wechat", publish_wechat)
 
         if wechat_result["success"]:
             results["published"].append("wechat")
@@ -135,7 +132,7 @@ async def publish_content_fn(
                         else:
                             record.status = SyncStatusEnum.PUBLISHED_WECHAT
 
-            await step.run("update-wechat-status", update_wechat_status)
+            await ctx.step.run("update-wechat-status", update_wechat_status)
         else:
             results["wechat_error"] = wechat_result.get("error")
 
@@ -153,6 +150,6 @@ async def publish_content_fn(
                     record.status = SyncStatusEnum.FAILED
                     record.error_message = f"XHS: {results.get('xhs_error', 'N/A')}, WeChat: {results.get('wechat_error', 'N/A')}"
 
-        await step.run("mark-failed", mark_failed)
+        await ctx.step.run("mark-failed", mark_failed)
 
     return results

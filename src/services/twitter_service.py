@@ -75,7 +75,7 @@ class TwitterService:
                 for ref in tweet.referenced_tweets:
                     if ref.type == "retweeted":
                         is_retweet = True
-                        referenced_tweet_id = ref.id
+                        referenced_tweet_id = str(ref.id)
                         break
 
             # Get media attachments

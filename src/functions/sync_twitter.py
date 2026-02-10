@@ -13,10 +13,7 @@ from sqlalchemy import select
     trigger=inngest.TriggerCron(cron="*/30 * * * *"),
     retries=3,
 )
-async def sync_twitter_fn(
-    ctx: inngest.Context,
-    step: inngest.Step,
-) -> dict:
+async def sync_twitter_fn(ctx: inngest.Context) -> dict:
     """
     Periodically sync new tweets from monitored Twitter users.
 
@@ -41,7 +38,7 @@ async def sync_twitter_fn(
             rows = result.all()
             return {row.author_id: row.tweet_id for row in rows}
 
-    since_ids = await step.run("get-since-ids", get_since_ids)
+    since_ids = await ctx.step.run("get-since-ids", get_since_ids)
 
     # Step 2: Fetch new tweets
     async def fetch_tweets() -> list[dict]:
@@ -49,7 +46,7 @@ async def sync_twitter_fn(
         tweets = twitter.get_new_tweets_for_all_users(since_ids=since_ids)
         return [tweet.model_dump(mode="json") for tweet in tweets]
 
-    tweets = await step.run("fetch-tweets", fetch_tweets)
+    tweets = await ctx.step.run("fetch-tweets", fetch_tweets)
 
     if not tweets:
         return {"synced": 0, "message": "No new tweets found"}
@@ -69,10 +66,10 @@ async def sync_twitter_fn(
                 )
                 session.add(record)
 
-        await step.run(f"save-tweet-{tweet['id']}", save_tweet)
+        await ctx.step.run(f"save-tweet-{tweet['id']}", save_tweet)
 
         # Send event for translation
-        await step.send_event(
+        await ctx.step.send_event(
             f"send-event-{tweet['id']}",
             events=[
                 inngest.Event(
