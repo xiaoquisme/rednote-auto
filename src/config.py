@@ -83,6 +83,7 @@ class InngestConfig(BaseSettings):
 
     app_id: str = Field(default="rednote-auto")
     is_production: bool = Field(default=False)
+    dev_server_url: Optional[str] = Field(default=None)
 
     model_config = SettingsConfigDict(
         env_prefix="INNGEST_",

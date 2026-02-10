@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # Multi-stage build for rednote-auto
 # Stage 1: Build dependencies
 FROM python:3.12-slim AS builder
@@ -15,15 +13,13 @@ WORKDIR /app
 
 # Install dependencies first (better caching)
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+RUN uv sync --frozen --no-install-project --no-dev
 
 # Copy project and install
 COPY src/ src/
 COPY scripts/ scripts/
 COPY config/ config/
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev
 
 
 # Stage 2: Runtime image

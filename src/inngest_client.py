@@ -11,6 +11,8 @@ def create_inngest_client() -> inngest.Inngest:
     return inngest.Inngest(
         app_id=settings.inngest.app_id,
         is_production=settings.inngest.is_production,
+        api_base_url=settings.inngest.dev_server_url,
+        event_api_base_url=settings.inngest.dev_server_url,
     )
 
 
