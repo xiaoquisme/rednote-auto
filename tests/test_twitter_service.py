@@ -1,288 +1,335 @@
-"""Tests for Twitter service."""
+"""Tests for Twitter service (Playwright-based syndication scraper)."""
 
 import pytest
-from datetime import datetime
-from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 from src.services.twitter_service import TwitterService
 from src.models.tweet import Tweet
 
 
-class TestTwitterService:
-    """Tests for TwitterService class."""
+# --- Fixture data simulating syndication __NEXT_DATA__ entries ---
 
-    def test_init_with_bearer_token(self):
-        """Test initialization with bearer token."""
-        service = TwitterService(bearer_token="test_token")
-        assert service.bearer_token == "test_token"
+BASIC_ENTRY = {
+    "content": {
+        "tweet": {
+            "id_str": "1234567890",
+            "user": {"id_str": "9876", "screen_name": "testuser"},
+            "full_text": "Hello world!",
+            "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+            "entities": {},
+        }
+    }
+}
+
+ENTRY_WITH_MEDIA = {
+    "content": {
+        "tweet": {
+            "id_str": "1234567891",
+            "user": {"id_str": "9876", "screen_name": "testuser"},
+            "full_text": "Check this photo!",
+            "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+            "entities": {},
+            "extended_entities": {
+                "media": [
+                    {
+                        "id_str": "media_1",
+                        "type": "photo",
+                        "media_url_https": "https://pbs.twimg.com/media/photo.jpg",
+                    }
+                ]
+            },
+        }
+    }
+}
+
+RETWEET_ENTRY = {
+    "content": {
+        "tweet": {
+            "id_str": "1234567892",
+            "user": {"id_str": "9876", "screen_name": "testuser"},
+            "full_text": "RT @someone: Something",
+            "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+            "entities": {},
+            "retweeted_status": {
+                "id_str": "original_tweet_id",
+            },
+        }
+    }
+}
+
+ENTRY_NO_ID = {
+    "content": {
+        "tweet": {
+            "user": {"id_str": "9876"},
+            "full_text": "Missing id_str",
+        }
+    }
+}
+
+
+class TestParseTweetEntry:
+    """Tests for the pure _parse_tweet_entry static method."""
+
+    def test_basic_tweet(self):
+        tweet = TwitterService._parse_tweet_entry(BASIC_ENTRY)
+        assert tweet is not None
+        assert tweet.id == "1234567890"
+        assert tweet.author_id == "9876"
+        assert tweet.text == "Hello world!"
+        assert tweet.is_retweet is False
+        assert tweet.referenced_tweet_id is None
+
+    def test_tweet_with_media(self):
+        tweet = TwitterService._parse_tweet_entry(ENTRY_WITH_MEDIA)
+        assert tweet is not None
+        assert tweet.has_media
+        assert len(tweet.photos) == 1
+        assert tweet.photos[0].url == "https://pbs.twimg.com/media/photo.jpg"
+        assert tweet.photos[0].media_key == "media_1"
+
+    def test_retweet_detection(self):
+        tweet = TwitterService._parse_tweet_entry(RETWEET_ENTRY)
+        assert tweet is not None
+        assert tweet.is_retweet is True
+        assert tweet.referenced_tweet_id == "original_tweet_id"
+
+    def test_entry_without_id_returns_none(self):
+        tweet = TwitterService._parse_tweet_entry(ENTRY_NO_ID)
+        assert tweet is None
+
+    def test_fallback_text_field(self):
+        entry = {
+            "content": {
+                "tweet": {
+                    "id_str": "111",
+                    "user": {"id_str": "222"},
+                    "text": "fallback text",
+                    "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+                    "entities": {},
+                }
+            }
+        }
+        tweet = TwitterService._parse_tweet_entry(entry)
+        assert tweet is not None
+        assert tweet.text == "fallback text"
+
+    def test_invalid_created_at_uses_fallback(self):
+        entry = {
+            "content": {
+                "tweet": {
+                    "id_str": "111",
+                    "user": {"id_str": "222"},
+                    "full_text": "test",
+                    "created_at": "invalid-date",
+                    "entities": {},
+                }
+            }
+        }
+        tweet = TwitterService._parse_tweet_entry(entry)
+        assert tweet is not None
+        assert isinstance(tweet.created_at, datetime)
+
+    def test_media_from_entities_fallback(self):
+        """Media parsed from entities when extended_entities is absent."""
+        entry = {
+            "content": {
+                "tweet": {
+                    "id_str": "111",
+                    "user": {"id_str": "222"},
+                    "full_text": "test",
+                    "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+                    "entities": {
+                        "media": [
+                            {
+                                "id_str": "m1",
+                                "type": "photo",
+                                "media_url_https": "https://example.com/img.jpg",
+                            }
+                        ]
+                    },
+                }
+            }
+        }
+        tweet = TwitterService._parse_tweet_entry(entry)
+        assert tweet is not None
+        assert len(tweet.media) == 1
+        assert tweet.media[0].url == "https://example.com/img.jpg"
+
+
+class TestGetUserTweets:
+    """Tests for get_user_tweets with mocked _fetch_timeline_entries."""
+
+    @pytest.fixture
+    def service(self):
+        return TwitterService(
+            target_usernames=["testuser"],
+            headless=True,
+            request_delay=0,
+        )
+
+    async def test_returns_parsed_tweets(self, service):
+        service._fetch_timeline_entries = AsyncMock(
+            return_value=[BASIC_ENTRY, ENTRY_WITH_MEDIA]
+        )
+
+        tweets = await service.get_user_tweets("testuser")
+        assert len(tweets) == 2
+        assert tweets[0].id == "1234567890"
+        assert tweets[1].id == "1234567891"
+
+    async def test_filters_by_since_id(self, service):
+        service._fetch_timeline_entries = AsyncMock(
+            return_value=[BASIC_ENTRY, ENTRY_WITH_MEDIA]
+        )
+
+        tweets = await service.get_user_tweets("testuser", since_id="1234567890")
+        assert len(tweets) == 1
+        assert tweets[0].id == "1234567891"
+
+    async def test_respects_max_results(self, service):
+        service._fetch_timeline_entries = AsyncMock(
+            return_value=[BASIC_ENTRY, ENTRY_WITH_MEDIA]
+        )
+
+        tweets = await service.get_user_tweets("testuser", max_results=1)
+        assert len(tweets) == 1
+
+    async def test_skips_invalid_entries(self, service):
+        service._fetch_timeline_entries = AsyncMock(
+            return_value=[ENTRY_NO_ID, BASIC_ENTRY]
+        )
+
+        tweets = await service.get_user_tweets("testuser")
+        assert len(tweets) == 1
+        assert tweets[0].id == "1234567890"
+
+    async def test_empty_entries(self, service):
+        service._fetch_timeline_entries = AsyncMock(return_value=[])
+
+        tweets = await service.get_user_tweets("testuser")
+        assert tweets == []
+
+
+class TestGetNewTweetsForAllUsers:
+    """Tests for get_new_tweets_for_all_users."""
+
+    @pytest.fixture
+    def service(self):
+        return TwitterService(
+            target_usernames=["user1", "user2"],
+            headless=True,
+            request_delay=0,
+        )
+
+    async def test_fetches_from_all_users(self, service):
+        entry_user1 = {
+            "content": {
+                "tweet": {
+                    "id_str": "100",
+                    "user": {"id_str": "u1", "screen_name": "user1"},
+                    "full_text": "User 1 tweet",
+                    "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+                    "entities": {},
+                }
+            }
+        }
+        entry_user2 = {
+            "content": {
+                "tweet": {
+                    "id_str": "200",
+                    "user": {"id_str": "u2", "screen_name": "user2"},
+                    "full_text": "User 2 tweet",
+                    "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+                    "entities": {},
+                }
+            }
+        }
+
+        async def mock_fetch(username):
+            return [entry_user1] if username == "user1" else [entry_user2]
+
+        service._fetch_timeline_entries = AsyncMock(side_effect=mock_fetch)
+
+        tweets = await service.get_new_tweets_for_all_users()
+        assert len(tweets) == 2
+        ids = {t.id for t in tweets}
+        assert ids == {"100", "200"}
+
+    async def test_filters_retweets(self, service):
+        service._fetch_timeline_entries = AsyncMock(
+            return_value=[BASIC_ENTRY, RETWEET_ENTRY]
+        )
+
+        tweets = await service.get_new_tweets_for_all_users()
+        # Retweet should be filtered, only original from each user call
+        assert all(not t.is_retweet for t in tweets)
+
+    async def test_filters_by_since_ids(self, service):
+        entry = {
+            "content": {
+                "tweet": {
+                    "id_str": "500",
+                    "user": {"id_str": "author1", "screen_name": "user1"},
+                    "full_text": "Old tweet",
+                    "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+                    "entities": {},
+                }
+            }
+        }
+        service._fetch_timeline_entries = AsyncMock(return_value=[entry])
+        service.target_usernames = ["user1"]
+
+        tweets = await service.get_new_tweets_for_all_users(
+            since_ids={"author1": "500"}
+        )
+        assert len(tweets) == 0
+
+    async def test_passes_new_tweets_through(self, service):
+        entry = {
+            "content": {
+                "tweet": {
+                    "id_str": "600",
+                    "user": {"id_str": "author1", "screen_name": "user1"},
+                    "full_text": "New tweet",
+                    "created_at": "Mon Jan 01 12:00:00 +0000 2024",
+                    "entities": {},
+                }
+            }
+        }
+        service._fetch_timeline_entries = AsyncMock(return_value=[entry])
+        service.target_usernames = ["user1"]
+
+        tweets = await service.get_new_tweets_for_all_users(
+            since_ids={"author1": "500"}
+        )
+        assert len(tweets) == 1
+        assert tweets[0].id == "600"
+
+
+class TestInit:
+    """Tests for TwitterService initialization."""
 
     @patch("src.services.twitter_service.get_settings")
     def test_init_from_settings(self, mock_get_settings):
-        """Test initialization from settings."""
+        from unittest.mock import Mock
         mock_settings = Mock()
-        mock_settings.twitter.bearer_token = "settings_token"
-        mock_settings.twitter.target_user_ids = ["user1", "user2"]
+        mock_settings.twitter.target_usernames = ["user1", "user2"]
+        mock_settings.twitter.headless = True
+        mock_settings.twitter.request_delay = 2.0
         mock_get_settings.return_value = mock_settings
 
         service = TwitterService()
-        assert service.bearer_token == "settings_token"
-        assert service.target_user_ids == ["user1", "user2"]
+        assert service.target_usernames == ["user1", "user2"]
+        assert service.headless is True
+        assert service.request_delay == 2.0
 
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_client_property_creates_client(self, mock_client_class):
-        """Test that client property creates a tweepy client."""
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService(bearer_token="test_token")
-        client = service.client
-
-        mock_client_class.assert_called_once_with(bearer_token="test_token")
-        assert client is mock_client
-
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_client_property_cached(self, mock_client_class):
-        """Test that client is cached."""
-        service = TwitterService(bearer_token="test_token")
-
-        # Access twice
-        client1 = service.client
-        client2 = service.client
-
-        # Should only create once
-        mock_client_class.assert_called_once()
-        assert client1 is client2
-
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_get_user_tweets_empty_response(self, mock_client_class):
-        """Test get_user_tweets with empty response."""
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = None
-        mock_client.get_users_tweets.return_value = mock_response
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService(bearer_token="test_token")
-        tweets = service.get_user_tweets("user123")
-
-        assert tweets == []
-
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_get_user_tweets_with_data(self, mock_client_class):
-        """Test get_user_tweets with tweet data."""
-        mock_client = Mock()
-
-        # Create mock tweet
-        mock_tweet = Mock()
-        mock_tweet.id = "123456"
-        mock_tweet.text = "Hello world!"
-        mock_tweet.created_at = datetime(2024, 1, 1, 12, 0, 0)
-        mock_tweet.referenced_tweets = None
-        mock_tweet.attachments = None
-
-        mock_response = Mock()
-        mock_response.data = [mock_tweet]
-        mock_response.includes = None
-
-        mock_client.get_users_tweets.return_value = mock_response
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService(bearer_token="test_token")
-        tweets = service.get_user_tweets("user123")
-
-        assert len(tweets) == 1
-        assert tweets[0].id == "123456"
-        assert tweets[0].text == "Hello world!"
-        assert tweets[0].author_id == "user123"
-
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_get_user_tweets_with_media(self, mock_client_class):
-        """Test get_user_tweets with media attachments."""
-        mock_client = Mock()
-
-        # Create mock media
-        mock_media = Mock()
-        mock_media.media_key = "media_key_1"
-        mock_media.type = "photo"
-        mock_media.url = "https://example.com/photo.jpg"
-        mock_media.preview_image_url = None
-
-        # Create mock tweet with media
-        mock_tweet = Mock()
-        mock_tweet.id = "123456"
-        mock_tweet.text = "Check this photo!"
-        mock_tweet.created_at = datetime(2024, 1, 1)
-        mock_tweet.referenced_tweets = None
-        mock_tweet.attachments = {"media_keys": ["media_key_1"]}
-
-        mock_response = Mock()
-        mock_response.data = [mock_tweet]
-        mock_response.includes = {"media": [mock_media]}
-
-        mock_client.get_users_tweets.return_value = mock_response
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService(bearer_token="test_token")
-        tweets = service.get_user_tweets("user123")
-
-        assert len(tweets) == 1
-        assert tweets[0].has_media
-        assert len(tweets[0].photos) == 1
-        assert tweets[0].photos[0].url == "https://example.com/photo.jpg"
-
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_get_user_tweets_retweet_detection(self, mock_client_class):
-        """Test that retweets are detected."""
-        mock_client = Mock()
-
-        # Create mock retweet reference
-        mock_ref = Mock()
-        mock_ref.type = "retweeted"
-        mock_ref.id = "original_tweet_id"
-
-        mock_tweet = Mock()
-        mock_tweet.id = "123456"
-        mock_tweet.text = "RT: Something"
-        mock_tweet.created_at = datetime(2024, 1, 1)
-        mock_tweet.referenced_tweets = [mock_ref]
-        mock_tweet.attachments = None
-
-        mock_response = Mock()
-        mock_response.data = [mock_tweet]
-        mock_response.includes = None
-
-        mock_client.get_users_tweets.return_value = mock_response
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService(bearer_token="test_token")
-        tweets = service.get_user_tweets("user123")
-
-        assert len(tweets) == 1
-        assert tweets[0].is_retweet is True
-        assert tweets[0].referenced_tweet_id == "original_tweet_id"
-
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_get_user_tweets_with_since_id(self, mock_client_class):
-        """Test get_user_tweets with since_id parameter."""
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = None
-        mock_client.get_users_tweets.return_value = mock_response
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService(bearer_token="test_token")
-        service.get_user_tweets("user123", since_id="12345", max_results=20)
-
-        mock_client.get_users_tweets.assert_called_once()
-        call_kwargs = mock_client.get_users_tweets.call_args[1]
-        assert call_kwargs["since_id"] == "12345"
-        assert call_kwargs["max_results"] == 20
-
-    @patch("src.services.twitter_service.get_settings")
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_get_new_tweets_for_all_users(self, mock_client_class, mock_get_settings):
-        """Test fetching tweets from all monitored users."""
-        mock_settings = Mock()
-        mock_settings.twitter.bearer_token = "token"
-        mock_settings.twitter.target_user_ids = ["user1", "user2"]
-        mock_get_settings.return_value = mock_settings
-
-        mock_client = Mock()
-
-        # Different tweets for different users
-        def mock_get_tweets(id, **kwargs):
-            mock_response = Mock()
-            if id == "user1":
-                mock_tweet = Mock()
-                mock_tweet.id = "tweet1"
-                mock_tweet.text = "User 1 tweet"
-                mock_tweet.created_at = datetime(2024, 1, 1)
-                mock_tweet.referenced_tweets = None
-                mock_tweet.attachments = None
-                mock_response.data = [mock_tweet]
-            else:
-                mock_tweet = Mock()
-                mock_tweet.id = "tweet2"
-                mock_tweet.text = "User 2 tweet"
-                mock_tweet.created_at = datetime(2024, 1, 1)
-                mock_tweet.referenced_tweets = None
-                mock_tweet.attachments = None
-                mock_response.data = [mock_tweet]
-            mock_response.includes = None
-            return mock_response
-
-        mock_client.get_users_tweets.side_effect = mock_get_tweets
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService()
-        tweets = service.get_new_tweets_for_all_users()
-
-        assert len(tweets) == 2
-        assert tweets[0].id == "tweet1"
-        assert tweets[1].id == "tweet2"
-
-    @patch("src.services.twitter_service.get_settings")
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_get_new_tweets_filters_retweets(self, mock_client_class, mock_get_settings):
-        """Test that retweets are filtered out."""
-        mock_settings = Mock()
-        mock_settings.twitter.bearer_token = "token"
-        mock_settings.twitter.target_user_ids = ["user1"]
-        mock_get_settings.return_value = mock_settings
-
-        mock_client = Mock()
-
-        # One original, one retweet
-        mock_original = Mock()
-        mock_original.id = "original"
-        mock_original.text = "Original tweet"
-        mock_original.created_at = datetime(2024, 1, 1)
-        mock_original.referenced_tweets = None
-        mock_original.attachments = None
-
-        mock_ref = Mock()
-        mock_ref.type = "retweeted"
-        mock_ref.id = "some_id"
-
-        mock_retweet = Mock()
-        mock_retweet.id = "retweet"
-        mock_retweet.text = "RT something"
-        mock_retweet.created_at = datetime(2024, 1, 1)
-        mock_retweet.referenced_tweets = [mock_ref]
-        mock_retweet.attachments = None
-
-        mock_response = Mock()
-        mock_response.data = [mock_original, mock_retweet]
-        mock_response.includes = None
-
-        mock_client.get_users_tweets.return_value = mock_response
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService()
-        tweets = service.get_new_tweets_for_all_users()
-
-        # Only original should be returned
-        assert len(tweets) == 1
-        assert tweets[0].id == "original"
-
-    @patch("src.services.twitter_service.get_settings")
-    @patch("src.services.twitter_service.tweepy.Client")
-    def test_get_new_tweets_with_since_ids(self, mock_client_class, mock_get_settings):
-        """Test using since_ids to get incremental tweets."""
-        mock_settings = Mock()
-        mock_settings.twitter.bearer_token = "token"
-        mock_settings.twitter.target_user_ids = ["user1"]
-        mock_get_settings.return_value = mock_settings
-
-        mock_client = Mock()
-        mock_response = Mock()
-        mock_response.data = None
-        mock_response.includes = None
-        mock_client.get_users_tweets.return_value = mock_response
-        mock_client_class.return_value = mock_client
-
-        service = TwitterService()
-        service.get_new_tweets_for_all_users(since_ids={"user1": "last_tweet_id"})
-
-        call_kwargs = mock_client.get_users_tweets.call_args[1]
-        assert call_kwargs["since_id"] == "last_tweet_id"
+    def test_init_with_explicit_params(self):
+        service = TwitterService(
+            target_usernames=["explicit"],
+            headless=False,
+            request_delay=5.0,
+        )
+        assert service.target_usernames == ["explicit"]
+        assert service.headless is False
+        assert service.request_delay == 5.0

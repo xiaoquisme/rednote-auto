@@ -43,8 +43,11 @@ async def sync_twitter_fn(ctx: inngest.Context) -> dict:
     # Step 2: Fetch new tweets
     async def fetch_tweets() -> list[dict]:
         twitter = TwitterService()
-        tweets = twitter.get_new_tweets_for_all_users(since_ids=since_ids)
-        return [tweet.model_dump(mode="json") for tweet in tweets]
+        try:
+            tweets = await twitter.get_new_tweets_for_all_users(since_ids=since_ids)
+            return [tweet.model_dump(mode="json") for tweet in tweets]
+        finally:
+            await twitter.close()
 
     tweets = await ctx.step.run("fetch-tweets", fetch_tweets)
 
@@ -58,6 +61,13 @@ async def sync_twitter_fn(ctx: inngest.Context) -> dict:
         async def save_tweet(t: dict = tweet) -> None:
             db = get_db()
             async with db.session() as session:
+                existing = await session.execute(
+                    select(SyncRecordModel).where(
+                        SyncRecordModel.tweet_id == str(t["id"])
+                    )
+                )
+                if existing.scalar_one_or_none() is not None:
+                    return
                 record = SyncRecordModel(
                     tweet_id=t["id"],
                     author_id=t["author_id"],

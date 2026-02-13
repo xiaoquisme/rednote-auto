@@ -11,9 +11,6 @@ dependencies = [
     # Workflow engine
     "inngest>=0.4.0",
 
-    # Twitter
-    "tweepy>=4.14.0",
-
     # Translation
     "openai>=1.0.0",
 

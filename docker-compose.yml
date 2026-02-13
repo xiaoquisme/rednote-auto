@@ -7,9 +7,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Twitter API
-      - TWITTER_BEARER_TOKEN=${TWITTER_BEARER_TOKEN}
-      - TWITTER_TARGET_USER_IDS=${TWITTER_TARGET_USER_IDS}
+      # Twitter scraping
+      - TWITTER_TARGET_USERNAMES=${TWITTER_TARGET_USERNAMES}
+      - TWITTER_HEADLESS=${TWITTER_HEADLESS:-true}
       # OpenAI API
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}

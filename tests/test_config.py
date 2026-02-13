@@ -17,11 +17,13 @@ def test_default_settings():
 
 def test_twitter_config(monkeypatch):
     """Test Twitter config with defaults when no env vars set."""
-    monkeypatch.delenv("TWITTER_BEARER_TOKEN", raising=False)
-    monkeypatch.delenv("TWITTER_TARGET_USER_IDS", raising=False)
+    monkeypatch.delenv("TWITTER_TARGET_USERNAMES", raising=False)
+    monkeypatch.delenv("TWITTER_HEADLESS", raising=False)
+    monkeypatch.delenv("TWITTER_REQUEST_DELAY", raising=False)
     config = TwitterConfig(_env_file=None)
-    assert config.bearer_token == ""
-    assert config.target_user_ids == []
+    assert config.target_usernames == []
+    assert config.headless is True
+    assert config.request_delay == 2.0
 
 
 def test_openai_config(monkeypatch):

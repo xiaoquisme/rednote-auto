@@ -9,10 +9,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class TwitterConfig(BaseSettings):
-    """Twitter API configuration."""
+    """Twitter scraping configuration (Playwright-based)."""
 
-    bearer_token: str = Field(default="")
-    target_user_ids: list[str] = Field(default_factory=list)
+    target_usernames: list[str] = Field(default_factory=list)
+    headless: bool = Field(default=True)
+    request_delay: float = Field(default=2.0)
 
     model_config = SettingsConfigDict(
         env_prefix="TWITTER_",

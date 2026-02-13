@@ -1,12 +1,15 @@
 """小红书 (XHS) publishing service using Playwright."""
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Optional
 
 from playwright.async_api import async_playwright, Browser, BrowserContext
 
 from src.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class XHSService:
@@ -33,16 +36,32 @@ class XHSService:
             return self._context
 
         playwright = await async_playwright().start()
-        self._browser = await playwright.chromium.launch(headless=self.headless)
+        self._browser = await playwright.chromium.launch(
+            headless=self.headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+            ],
+        )
 
         # Try to load saved state
         state_file = self.browser_state_dir / "xhs_state.json"
+        context_opts = {
+            "user_agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+        }
         if state_file.exists():
-            self._context = await self._browser.new_context(
-                storage_state=str(state_file)
-            )
-        else:
-            self._context = await self._browser.new_context()
+            context_opts["storage_state"] = str(state_file)
+
+        self._context = await self._browser.new_context(**context_opts)
+
+        # Remove webdriver detection flag
+        await self._context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
 
         return self._context
 
@@ -53,12 +72,18 @@ class XHSService:
 
         try:
             await page.goto(self.CREATOR_URL)
-            await page.wait_for_load_state("networkidle", timeout=10000)
+            await page.wait_for_load_state("networkidle", timeout=15000)
 
-            # Check if we're on the login page or creator dashboard
             url = page.url
-            return "creator.xiaohongshu.com" in url and "login" not in url
-        except Exception:
+            logged_in = "creator.xiaohongshu.com" in url and "login" not in url
+            if not logged_in:
+                debug_dir = Path("data/debug")
+                debug_dir.mkdir(parents=True, exist_ok=True)
+                await page.screenshot(path=str(debug_dir / "xhs_login_check.png"))
+                logger.warning("XHS login check failed. URL: %s. Screenshot saved.", url)
+            return logged_in
+        except Exception as e:
+            logger.warning("XHS login check error: %s", e)
             return False
         finally:
             await page.close()
@@ -150,23 +175,44 @@ class XHSService:
             content_editor = page.locator('[contenteditable="true"]').first
             await content_editor.fill(content)
 
+            # Save debug screenshot before clicking publish
+            debug_dir = Path("data/debug")
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            await page.screenshot(path=str(debug_dir / "xhs_before_publish.png"))
+            logger.info("Saved pre-publish screenshot to data/debug/xhs_before_publish.png")
+
             # Click publish button
             publish_btn = page.locator('button:has-text("发布")').first
             await publish_btn.click()
 
             # Wait for success
-            await page.wait_for_url(
-                f"{self.CREATOR_URL}/publish/success**", timeout=30000
-            )
+            try:
+                await page.wait_for_url(
+                    f"{self.CREATOR_URL}/publish/success**", timeout=30000
+                )
+            except Exception:
+                # Save screenshot on failure for debugging
+                await page.screenshot(path=str(debug_dir / "xhs_publish_failed.png"))
+                logger.error(
+                    "Publish did not navigate to success page. URL: %s. "
+                    "Screenshot saved to data/debug/xhs_publish_failed.png",
+                    page.url,
+                )
+                raise RuntimeError(
+                    f"Publish failed: page did not reach success URL. Current URL: {page.url}"
+                )
 
             # Extract post ID from success page if possible
             success_url = page.url
+            await page.screenshot(path=str(debug_dir / "xhs_publish_success.png"))
+            logger.info("Published successfully. URL: %s", success_url)
+
             # Note ID would be in the URL or page content
             return success_url.split("/")[-1] if "/" in success_url else None
 
-        except Exception as e:
-            print(f"Publish failed: {e}")
-            return None
+        except Exception:
+            logger.exception("XHS publish_note failed")
+            raise
         finally:
             await page.close()
 

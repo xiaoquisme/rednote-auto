@@ -7,9 +7,10 @@ enabled_platforms:
   - xhs
   - wechat
 
-# Twitter settings (use env vars for secrets)
+# Twitter settings
 twitter:
-  target_user_ids: []  # Add Twitter user IDs to monitor
+  target_usernames: []  # Add Twitter usernames to monitor (without @)
+  headless: true
 
 # XHS settings
 xhs:

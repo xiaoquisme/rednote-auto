@@ -366,6 +366,7 @@ class TestPublishNote:
         mock_page2.wait_for_load_state = AsyncMock()
         mock_page2.wait_for_url = AsyncMock()
         mock_page2.close = AsyncMock()
+        mock_page2.screenshot = AsyncMock()
         mock_page2.locator = Mock(return_value=mock_locator)
         mock_locator.first = mock_locator
         mock_locator.fill = AsyncMock()
@@ -413,6 +414,7 @@ class TestPublishNote:
         mock_page2.wait_for_load_state = AsyncMock()
         mock_page2.wait_for_url = AsyncMock()
         mock_page2.close = AsyncMock()
+        mock_page2.screenshot = AsyncMock()
         mock_page2.locator = Mock(return_value=mock_locator)
         mock_locator.first = mock_locator
         mock_locator.fill = AsyncMock()
@@ -458,6 +460,7 @@ class TestPublishNote:
 
         mock_page2.goto = AsyncMock()
         mock_page2.wait_for_load_state = AsyncMock()
+        mock_page2.screenshot = AsyncMock()
         mock_page2.locator = Mock(return_value=mock_locator)
         mock_locator.first = mock_locator
         mock_locator.fill = AsyncMock()
@@ -471,12 +474,11 @@ class TestPublishNote:
             headless=True,
         )
 
-        result = await service.publish_note(
-            title="Test Title",
-            content="Test content",
-        )
-
-        assert result is None
+        with pytest.raises(Exception, match="Click failed"):
+            await service.publish_note(
+                title="Test Title",
+                content="Test content",
+            )
         mock_page2.close.assert_called_once()
 
 
