@@ -3,7 +3,7 @@
 import inngest
 
 from src.inngest_client import client
-from src.services.translator_service import TranslatorService
+from src.agents.translator_agent import run_translator_agent
 from src.persistence.database import get_db, SyncRecordModel, SyncStatusEnum
 from sqlalchemy import select
 
@@ -19,16 +19,18 @@ async def translate_tweet_fn(ctx: inngest.Context) -> dict:
 
     This function:
     1. Receives a tweet.fetched event
-    2. Translates the tweet text
+    2. Translates the tweet text using a Claude agent
     3. Updates the database
     4. Sends a tweet.translated event
     """
     tweet = ctx.event.data
 
-    # Step 1: Translate the tweet
+    # Step 1: Translate the tweet using agent
     async def translate() -> str:
-        translator = TranslatorService()
-        return translator.translate(tweet["text"])
+        result = await run_translator_agent(tweet["text"])
+        if not result["success"]:
+            raise RuntimeError(f"Translation failed: {result.get('error', 'unknown')}")
+        return result["translated_text"]
 
     translated_text = await ctx.step.run("translate", translate)
 

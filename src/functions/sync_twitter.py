@@ -3,7 +3,8 @@
 import inngest
 
 from src.inngest_client import client
-from src.services.twitter_service import TwitterService
+from src.agents.twitter_agent import run_twitter_agent
+from src.config import get_settings
 from src.persistence.database import get_db, SyncRecordModel, SyncStatusEnum
 from sqlalchemy import select
 
@@ -19,7 +20,7 @@ async def sync_twitter_fn(ctx: inngest.Context) -> dict:
 
     This function:
     1. Gets the last synced tweet ID for each user
-    2. Fetches new tweets since that ID
+    2. Fetches new tweets via a Claude agent browsing x.com
     3. Sends a tweet.fetched event for each new tweet
     """
 
@@ -40,23 +41,39 @@ async def sync_twitter_fn(ctx: inngest.Context) -> dict:
 
     since_ids = await ctx.step.run("get-since-ids", get_since_ids)
 
-    # Step 2: Fetch new tweets
-    async def fetch_tweets() -> list[dict]:
-        twitter = TwitterService()
-        try:
-            tweets = await twitter.get_new_tweets_for_all_users(since_ids=since_ids)
-            return [tweet.model_dump(mode="json") for tweet in tweets]
-        finally:
-            await twitter.close()
+    # Step 2: Fetch new tweets using agent for each monitored user
+    settings = get_settings()
+    usernames = settings.twitter.target_usernames
 
-    tweets = await ctx.step.run("fetch-tweets", fetch_tweets)
+    all_tweets: list[dict] = []
+    for username in usernames:
 
-    if not tweets:
+        async def fetch_user_tweets(uname: str = username) -> list[dict]:
+            # Find since_id for this user (since_ids is keyed by author_id,
+            # but agent returns author_id, so we pass all since_ids to filter later)
+            result = await run_twitter_agent(uname)
+            if not result["success"]:
+                return []
+            return result["tweets"]
+
+        user_tweets = await ctx.step.run(f"fetch-tweets-{username}", fetch_user_tweets)
+
+        # Filter out retweets and already-seen tweets
+        for tweet in user_tweets:
+            if tweet.get("is_retweet"):
+                continue
+            author_id = tweet.get("author_id", username)
+            author_since_id = since_ids.get(author_id)
+            if author_since_id and int(tweet["id"]) <= int(author_since_id):
+                continue
+            all_tweets.append(tweet)
+
+    if not all_tweets:
         return {"synced": 0, "message": "No new tweets found"}
 
     # Step 3: Save tweets to database and send events
     events_sent = 0
-    for tweet in tweets:
+    for tweet in all_tweets:
         # Save to database
         async def save_tweet(t: dict = tweet) -> None:
             db = get_db()
@@ -70,7 +87,7 @@ async def sync_twitter_fn(ctx: inngest.Context) -> dict:
                     return
                 record = SyncRecordModel(
                     tweet_id=t["id"],
-                    author_id=t["author_id"],
+                    author_id=t.get("author_id", ""),
                     original_text=t["text"],
                     status=SyncStatusEnum.PENDING,
                 )
@@ -90,4 +107,4 @@ async def sync_twitter_fn(ctx: inngest.Context) -> dict:
         )
         events_sent += 1
 
-    return {"synced": events_sent, "tweets": [t["id"] for t in tweets]}
+    return {"synced": events_sent, "tweets": [t["id"] for t in all_tweets]}

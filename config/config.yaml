@@ -10,16 +10,12 @@ enabled_platforms:
 # Twitter settings
 twitter:
   target_usernames: []  # Add Twitter usernames to monitor (without @)
-  headless: true
 
-# XHS settings
-xhs:
-  browser_state_dir: data/browser_state
+# Agent settings (Claude Code agents)
+agent:
+  model: sonnet
+  max_turns: 30
   headless: true
-
-# OpenAI settings
-openai:
-  model: openai/gpt-5.2
 
 # Database settings
 database:

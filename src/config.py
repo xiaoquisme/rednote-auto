@@ -79,6 +79,21 @@ class DatabaseConfig(BaseSettings):
     )
 
 
+class AgentConfig(BaseSettings):
+    """Claude Code agent configuration."""
+
+    model: str = Field(default="sonnet")
+    max_turns: int = Field(default=30)
+    headless: bool = Field(default=True)
+
+    model_config = SettingsConfigDict(
+        env_prefix="AGENT_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 class InngestConfig(BaseSettings):
     """Inngest configuration."""
 
@@ -104,6 +119,7 @@ class Settings(BaseSettings):
     _xhs: Optional[XHSConfig] = None
     _database: Optional[DatabaseConfig] = None
     _inngest: Optional[InngestConfig] = None
+    _agent: Optional[AgentConfig] = None
 
     @property
     def twitter(self) -> TwitterConfig:
@@ -140,6 +156,12 @@ class Settings(BaseSettings):
         if self._inngest is None:
             self._inngest = InngestConfig()
         return self._inngest
+
+    @property
+    def agent(self) -> AgentConfig:
+        if self._agent is None:
+            self._agent = AgentConfig()
+        return self._agent
 
     # Sync settings
     sync_interval_minutes: int = Field(default=30)

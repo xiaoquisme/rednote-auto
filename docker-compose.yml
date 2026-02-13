@@ -7,19 +7,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Twitter scraping
+      # Anthropic API (for Claude Code agents)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Twitter
       - TWITTER_TARGET_USERNAMES=${TWITTER_TARGET_USERNAMES}
-      - TWITTER_HEADLESS=${TWITTER_HEADLESS:-true}
-      # OpenAI API
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
-      # WeChat (optional)
-      - WECHAT_APP_ID=${WECHAT_APP_ID:-}
-      - WECHAT_APP_SECRET=${WECHAT_APP_SECRET:-}
-      # XHS
-      - XHS_HEADLESS=${XHS_HEADLESS:-true}
-      - XHS_BROWSER_STATE_DIR=/app/data/browser_state
+      # Agent settings
+      - AGENT_MODEL=${AGENT_MODEL:-sonnet}
+      - AGENT_MAX_TURNS=${AGENT_MAX_TURNS:-30}
+      - AGENT_HEADLESS=${AGENT_HEADLESS:-true}
       # Database
       - DATABASE_URL=sqlite+aiosqlite:////app/data/posts.db
       # Inngest
@@ -45,17 +40,3 @@ services:
       - "8288:8288"
     command: ["inngest", "dev", "-u", "http://app:8000/api/inngest"]
     restart: unless-stopped
-
-  # XHS Login Helper (run manually when needed)
-  xhs-login:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      - XHS_HEADLESS=false
-      - XHS_BROWSER_STATE_DIR=/app/data/browser_state
-    volumes:
-      - ./data:/app/data
-    command: ["python", "scripts/setup_xhs_login.py"]
-    profiles:
-      - login  # Only run with: docker compose --profile login run xhs-login

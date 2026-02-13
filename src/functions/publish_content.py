@@ -4,8 +4,10 @@ import inngest
 
 from src.inngest_client import client
 from src.config import get_settings
-from src.services.xhs_service import XHSService
-from src.services.wechat_service import WeChatService
+from src.agents.publisher_agent import (
+    run_xhs_publisher_agent,
+    run_wechat_publisher_agent,
+)
 from src.persistence.database import get_db, SyncRecordModel, SyncStatusEnum
 from sqlalchemy import select
 
@@ -17,12 +19,12 @@ from sqlalchemy import select
 )
 async def publish_content_fn(ctx: inngest.Context) -> dict:
     """
-    Publish translated content to enabled platforms.
+    Publish translated content to enabled platforms using Claude agents.
 
     This function:
     1. Receives a tweet.translated event
-    2. Publishes to 小红书 (if enabled)
-    3. Publishes to 微信公众号 (if enabled)
+    2. Publishes to 小红书 via agent (if enabled)
+    3. Publishes to 微信公众号 via agent (if enabled)
     4. Updates the database with results
     """
     data = ctx.event.data
@@ -38,23 +40,15 @@ async def publish_content_fn(ctx: inngest.Context) -> dict:
     if "xhs" in enabled_platforms:
 
         async def publish_xhs() -> dict:
-            try:
-                xhs = XHSService()
+            # Create a title from the first line or first 50 chars
+            title = translated_text.split("\n")[0][:50]
+            if len(translated_text) > 50:
+                title = title[:47] + "..."
 
-                # Create a title from the first line or first 20 chars
-                title = translated_text.split("\n")[0][:50]
-                if len(translated_text) > 50:
-                    title = title[:47] + "..."
-
-                post_id = await xhs.publish_note(
-                    title=title,
-                    content=translated_text,
-                )
-                await xhs.close()
-
-                return {"success": True, "post_id": post_id}
-            except Exception as e:
-                return {"success": False, "error": str(e)}
+            return await run_xhs_publisher_agent(
+                title=title,
+                content=translated_text,
+            )
 
         xhs_result = await ctx.step.run("publish-xhs", publish_xhs)
 
@@ -81,34 +75,23 @@ async def publish_content_fn(ctx: inngest.Context) -> dict:
             await ctx.step.run("update-xhs-status", update_xhs_status)
         else:
             results["xhs_error"] = xhs_result.get("error")
+            if xhs_result.get("login_required"):
+                results["xhs_login_required"] = True
 
     # Step 2: Publish to WeChat if enabled
     if "wechat" in enabled_platforms:
 
         async def publish_wechat() -> dict:
-            try:
-                wechat = WeChatService()
+            # Create a title
+            title = translated_text.split("\n")[0][:60]
+            if len(translated_text) > 60:
+                title = title[:57] + "..."
 
-                # Format content
-                content = wechat.format_article_content(
-                    translated_text=translated_text,
-                    original_text=original_text,
-                )
-
-                # Create a title
-                title = translated_text.split("\n")[0][:60]
-                if len(translated_text) > 60:
-                    title = title[:57] + "..."
-
-                media_id = wechat.create_draft_article(
-                    title=title,
-                    content=content,
-                    digest=translated_text[:100],
-                )
-
-                return {"success": True, "media_id": media_id}
-            except Exception as e:
-                return {"success": False, "error": str(e)}
+            return await run_wechat_publisher_agent(
+                title=title,
+                content=translated_text,
+                original_text=original_text,
+            )
 
         wechat_result = await ctx.step.run("publish-wechat", publish_wechat)
 
@@ -135,6 +118,8 @@ async def publish_content_fn(ctx: inngest.Context) -> dict:
             await ctx.step.run("update-wechat-status", update_wechat_status)
         else:
             results["wechat_error"] = wechat_result.get("error")
+            if wechat_result.get("login_required"):
+                results["wechat_login_required"] = True
 
     # Mark as failed if nothing was published
     if not results["published"]:

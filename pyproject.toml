@@ -11,13 +11,8 @@ dependencies = [
     # Workflow engine
     "inngest>=0.4.0",
 
-    # Translation
-    "openai>=1.0.0",
-
-    # Publishing platforms
-    "wechatpy>=1.8.0",
-    "cryptography>=41.0.0",
-    "playwright>=1.40.0",
+    # Claude Code agent SDK
+    "claude-code-sdk>=0.0.25",
 
     # Persistence
     "sqlalchemy>=2.0.0",
